@@ -17,7 +17,7 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api", router);
 
 // Serve the built client in production (client/dist), if present.
-const clientDist = path.resolve(__dirname, "public");
+const clientDist = path.resolve(__dirname, "../public");
 if (fs.existsSync(clientDist)) {
 	app.use(express.static(clientDist));
 	app.get("*", (_req, res) =>
