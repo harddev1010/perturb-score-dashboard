@@ -26,6 +26,15 @@ const getRecentScores = db.prepare(`
   LIMIT ?
 `);
 
+// A miner's most recent tasks (task ids + own score), newest first.
+const getUidTasks = db.prepare(`
+  SELECT task_id, score, captured_at
+  FROM scores
+  WHERE uid = ?
+  ORDER BY captured_at DESC
+  LIMIT ?
+`);
+
 // --- helpers ---------------------------------------------------------------
 
 function serializeMiner(m) {
@@ -131,6 +140,67 @@ router.get("/miners/:uid", (req, res) => {
     stats: computeStats(scores),
     scores,
   });
+});
+
+// Per-challenge gap: for a miner's last N tasks, compare its score against the
+// top scores of that same task.
+// /api/focus?uids=40,48&top=5
+function buildFocusForUid(uid, top) {
+  const taskRows = getUidTasks.all(uid, SCORE_WINDOW); // newest first
+  if (taskRows.length === 0) return { uid, rows: [] };
+
+  const taskIds = taskRows.map((r) => r.task_id);
+  const placeholders = taskIds.map(() => "?").join(",");
+  // All miners' scores for exactly these tasks.
+  const all = db
+    .prepare(
+      `SELECT task_id, uid, score FROM scores WHERE task_id IN (${placeholders})`
+    )
+    .all(...taskIds);
+
+  const byTask = new Map();
+  for (const r of all) {
+    let arr = byTask.get(r.task_id);
+    if (!arr) byTask.set(r.task_id, (arr = []));
+    arr.push(r);
+  }
+
+  const rows = taskRows.map((tr, i) => {
+    const list = (byTask.get(tr.task_id) || [])
+      .slice()
+      .sort((a, b) => b.score - a.score);
+    const myScore = tr.score ?? 0;
+    const better = list.filter((x) => x.score > myScore).length;
+    const participants = list.filter((x) => (x.score ?? 0) > 0).length;
+    const bestScore = list.length ? list[0].score : myScore;
+    return {
+      no: i + 1,
+      taskId: tr.task_id,
+      time: tr.captured_at,
+      myScore,
+      myRank: better + 1,
+      participants,
+      gapToTop: myScore - bestScore, // 0 when I am the best, else negative
+      topScores: list.slice(0, top).map((x) => ({ uid: x.uid, score: x.score })),
+    };
+  });
+
+  return { uid, rows };
+}
+
+router.get("/focus", (req, res) => {
+  const uids = String(req.query.uids || "")
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n >= 0);
+  const unique = [...new Set(uids)];
+  if (unique.length === 0) {
+    return res.status(400).json({ error: "provide at least one uid" });
+  }
+  const top = Math.min(Math.max(Number(req.query.top) || 5, 1), 10);
+
+  const miners = unique.map((uid) => buildFocusForUid(uid, top));
+  res.json({ top, miners });
 });
 
 // Compare a base miner against 1-3 target miners.
