@@ -203,6 +203,26 @@ router.get("/focus", (req, res) => {
   res.json({ top, miners });
 });
 
+// Flat single-uid variant: latest SCORE_WINDOW challenges for one miner.
+// /api/get_focus?uid=40 ->
+// [ { timestamp, task_id, my_score, my_rank, top_5_scores: [{uid, score}] } ]
+router.get("/get_focus", (req, res) => {
+  const uid = Number(req.query.uid);
+  if (!Number.isInteger(uid)) {
+    return res.status(400).json({ error: "invalid or missing uid" });
+  }
+  const { rows } = buildFocusForUid(uid, 5);
+  res.json(
+    rows.map((r) => ({
+      timestamp: r.time,
+      task_id: r.taskId,
+      my_score: r.myScore,
+      my_rank: r.myRank,
+      top_5_scores: r.topScores, // [{ uid, score }], best first, up to 5
+    }))
+  );
+});
+
 // Compare a base miner against 1-3 target miners.
 // /api/compare?uids=56,230,45  (first uid is treated as the base)
 router.get("/compare", (req, res) => {
