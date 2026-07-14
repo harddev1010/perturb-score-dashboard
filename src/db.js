@@ -105,54 +105,54 @@ const pruneStmt = db.prepare(`
 `);
 
 export function pruneOldTasks(keep = MAX_TASKS) {
-  return pruneStmt.run({ keep }).changes;
+	return pruneStmt.run({ keep }).changes;
 }
 
 // Persist one full poll atomically. Returns number of new score rows inserted.
 export const persistSnapshot = db.transaction((snapshot) => {
-  const { network, miners, capturedAt } = snapshot;
-  let inserted = 0;
+	const { network, miners, capturedAt } = snapshot;
+	let inserted = 0;
 
-  upsertNetworkStmt.run({
-    task_id: network.taskId,
-    timestamp: network.timestamp,
-    total_miners: network.totalMiners,
-    available_miners: network.availableMiners,
-    avg_score: network.avgScore,
-    avg_rmse: network.avgRmse,
-    avg_norm: network.avgNorm,
-    success_count: network.successCount,
-    last_weight_update: network.lastWeightUpdate,
-    captured_at: capturedAt,
-  });
+	upsertNetworkStmt.run({
+		task_id: network.taskId,
+		timestamp: network.timestamp,
+		total_miners: network.totalMiners,
+		available_miners: network.availableMiners,
+		avg_score: network.avgScore,
+		avg_rmse: network.avgRmse,
+		avg_norm: network.avgNorm,
+		success_count: network.successCount,
+		last_weight_update: network.lastWeightUpdate,
+		captured_at: capturedAt,
+	});
 
-  for (const m of miners) {
-    upsertMinerStmt.run({
-      uid: m.uid,
-      hotkey: m.hotkey,
-      coldkey: m.coldkey,
-      rank: m.rank,
-      incentive: m.incentive,
-      avg_score: m.avgScore,
-      last_score: m.lastScore,
-      rmse: m.rmse,
-      norm: m.norm,
-      result: m.result,
-      image_url: m.imageUrl,
-      updated_at: capturedAt,
-    });
+	for (const m of miners) {
+		upsertMinerStmt.run({
+			uid: m.uid,
+			hotkey: m.hotkey,
+			coldkey: m.coldkey,
+			rank: m.rank,
+			incentive: m.incentive,
+			avg_score: m.avgScore,
+			last_score: m.lastScore,
+			rmse: m.rmse,
+			norm: m.norm,
+			result: m.result,
+			image_url: m.imageUrl,
+			updated_at: capturedAt,
+		});
 
-    const res = insertScoreStmt.run({
-      uid: m.uid,
-      task_id: network.taskId,
-      score: m.lastScore,
-      rmse: m.rmse,
-      norm: m.norm,
-      result: m.result,
-      captured_at: capturedAt,
-    });
-    inserted += res.changes;
-  }
+		const res = insertScoreStmt.run({
+			uid: m.uid,
+			task_id: network.taskId,
+			score: m.lastScore,
+			rmse: m.rmse,
+			norm: m.norm,
+			result: m.result,
+			captured_at: capturedAt,
+		});
+		inserted += res.changes;
+	}
 
-  return inserted;
+	return inserted;
 });
